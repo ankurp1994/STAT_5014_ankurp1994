@@ -1,0 +1,228 @@
+---
+title: "Homework 2"
+author: "Ankur Patel"
+date: "9/16/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(dplyr)
+library(tidyverse)
+```
+
+## Problem 3:
+In my future work, I think version control will be useful mostly in collaborative settings because it will enable my team members and myself to keep track of each other's changes. However, if I am the sole person working on a script I may not make use of it as I will keep track of changes through comments directly on the script. I think that it is mostly useful when a script is being worked on by at least 2 people and is a good safeguard against fatal coding changes.
+
+## Problem 4:
+
+(a) We are looking at the sensory data from five operators from the Wu and Hamada book. First, we will get the raw data using the URL.
+
+```{r sensory_data, echo=TRUE, cache=FALSE, include=TRUE}
+#Code to get "http://www2.isye.gatech.edu/~jeffwu/wuhamadabook/data/Sensory.dat"
+sensory_url <- "http://www2.isye.gatech.edu/~jeffwu/wuhamadabook/data/Sensory.dat"
+sensory_data_raw <- fread(sensory_url,skip = 2,data.table = FALSE,header = FALSE, fill = TRUE)
+```
+Now we will tidy the sensory data using base R.
+```{r sensory_data_tidy_baseR,cache = FALSE, echo = TRUE, include = TRUE}
+#create an items_column which will be on the left side of the dataframe
+items_column <- vector(length = 0)
+for (i in 1:10)
+{
+  items_column <- append(items_column, rep(i,3))
+}
+#the item numbers are woven into the first column so we replace them with NA's #using the two lines of code below and call the new column first col_clean
+first_col_clean <- sensory_data_raw$V1
+first_col_clean[seq(1,30,3)] <- NA
+sensory_data_tidy_baseR <- cbind(first_col_clean,sensory_data_raw[,2:6])
+#we store the rows to fix in rows_to_fix
+rows_to_fix <- seq(1,30,3)
+#the for loop below shifts the rows to fix one entry to the left and the last entry is NA, ensuring that the operator and values are now aligned
+for (i in 1:length(rows_to_fix))
+{
+  curr_row <- rows_to_fix[i]
+  cleaned_row <- c(sensory_data_tidy_baseR[curr_row,2:6],NA)
+  sensory_data_tidy_baseR[curr_row,] <- cleaned_row
+}
+#rename the first column
+names(sensory_data_tidy_baseR)[1] <- "V1"
+#drop the last column since it is all NA
+sensory_data_tidy_baseR <- sensory_data_tidy_baseR[,1:5]
+#bind the items_column and rename the columns
+sensory_data_tidy_baseR <- cbind(items_column,sensory_data_tidy_baseR)
+names(sensory_data_tidy_baseR)<- c("Item","1","2","3","4","5")
+#the current form of sensory_data_tidy_baseR is what we will use for the tidyverse version so we make a copy of it here
+sensory_data_tidy_tidyverse <- copy(sensory_data_tidy_baseR)
+#operator_column repeats the operator values in a sequence 1,...,5 30 times which will be one of the columns of the final 150 x 3 dataframe
+operator_column <- rep(seq(1,5),30)
+#the measurement column turns the  data in the rows into a vector
+measurement_column <- vector(length = 0)
+for (i in 1:dim(sensory_data_tidy_baseR)[1])
+{
+  #unlist is used to turn the rows into vectors
+  measurement_column <- append(measurement_column,unlist(sensory_data_tidy_baseR[i,2:6],use.names = FALSE))
+}
+#the final items column should have 150 entries
+items_column_final <- vector(length = 0)
+for (i in 1:10)
+{
+  items_column_final <- append(items_column_final, rep(i,15))
+}
+sensory_data_tidy_baseR <- data.frame(cbind(items_column_final,operator_column,measurement_column))
+names(sensory_data_tidy_baseR) <-c("Item", "Operator","Data")
+print(head(sensory_data_tidy_baseR))
+
+```
+Now we will tidy the sensory data using tidyverse
+```{r sensory_data_tidy_tidyverse,cache = FALSE, echo = TRUE, include = TRUE}
+sensory_data_tidy_tidyverse <- sensory_data_tidy_tidyverse %>% gather(key = "Operator", value = "Data", 2,3,4,5,6)
+print(head(sensory_data_tidy_tidyverse))
+```
+Now we will do a summary and plot of the sensory data.
+```{r sensory_data_summary_plot,cache = FALSE, echo = TRUE, include = TRUE}
+knitr::kable(summary(sensory_data_tidy_tidyverse))
+boxplot(sensory_data_tidy_tidyverse$Data~sensory_data_tidy_tidyverse$Item)
+
+```
+(b) Now we will look at the olympic data. First we will read in the raw data from the URL.
+```{r olympic_data,cache = FALSE, echo = TRUE, include = TRUE}
+#Assign the url to a variable
+olympic_url <- "http://www2.isye.gatech.edu/~jeffwu/wuhamadabook/data/LongJumpData.dat"
+#Read in the raw data
+olympic_data_raw <- fread(olympic_url,skip = 1,data.table = FALSE,header = FALSE, fill = TRUE)
+
+```
+Next we will tidy the olympic data using base R.
+```{r olympic_data_tidy_baseR,cache = FALSE, echo = TRUE, include = TRUE}
+#years_columns are the positions of the columns that have year values
+years_columns <- c(1,3,5,7)
+#jump_columns are the positions of the columns that have values for the long jump
+jump_columns <- c(2,4,6,8)
+#standard_year is the standardized year (by adding 1900) of the stacked Year columns using years_columns above
+standard_year <- 1900+stack(olympic_data_raw[,years_columns])[1]
+stacked_jump <- stack(olympic_data_raw[,jump_columns])[1]
+olympic_data_tidy_baseR <- data.frame(cbind(standard_year, stacked_jump))
+names(olympic_data_tidy_baseR) <- c("Year", "Long Jump")
+print(head(olympic_data_tidy_baseR))
+```
+Next we will tidy the olympic data using tidyverse
+```{r olympic_data_tidy_tidyverse,cache = FALSE, echo = TRUE, include = TRUE}
+#use dplyr select to get the year and long jump columns separately into dataframes
+years_frame <-  select(olympic_data_raw,1,3,5,7)
+jump_frame <-  select(olympic_data_raw,2,4,6,8)
+#stack the dataframes
+years_stacked <- 1900+stack(years_frame)[1]
+jump_stacked <- stack(jump_frame)[1]
+#bind the stacked dataframes and restore the names
+olympic_data_tidy_tidyverse <- data.frame(cbind(years_stacked,jump_stacked))
+names(olympic_data_tidy_tidyverse) <- c("Year","Long Jump")
+print(head(olympic_data_tidy_tidyverse))
+```
+Finally we create a summary and plot of the olympic data
+```{r olympic_summary_plot,cache = FALSE, echo = TRUE, include = TRUE}
+knitr::kable(summary(olympic_data_tidy_tidyverse))
+plot(olympic_data_tidy_tidyverse$Year,olympic_data_tidy_tidyverse$`Long Jump`)
+```
+(c) Now we will look at the brain and body weight data for various species. First we will import the raw data from the URL.
+```{r species_data,cache = FALSE, echo = TRUE, include = TRUE}
+#Specify and assign the url to a variable
+species_url <- "https://www2.isye.gatech.edu/~jeffwu/wuhamadabook/data/BrainandBodyWeight.dat"
+#Read in the raw data
+species_data_raw <- fread(species_url,skip = 1,data.table = FALSE,header = FALSE, fill = TRUE)
+```
+Next we will tidy the species data using base R.
+```{r species_data_tidy_baseR,cache = FALSE, echo = TRUE, include = TRUE}
+#body_columns and brain_columns are the position of the columns in the raw species data for body weight and brain weight respectively
+body_columns <- seq(1,6,2)
+brain_columns <- seq(2,6,2)
+#body_vector and brain_vector are the stacked vectors of body and brain weight
+#extracted from species_data_raw by using body_columns and brain_columns
+body_vector <- stack(species_data_raw[,body_columns])[1]
+brain_vector <- stack(species_data_raw[,brain_columns])[1]
+#the id corresponding to a unique species
+species_id <- seq(1,62)
+#Now we combine the stacked vectors (the first 62 entries since there are only 62 species) into a data frame and add the species id column 
+species_data_tidy_baseR<-data.frame(cbind(species_id,body_vector[1:62,1],brain_vector[1:62,1]))
+names(species_data_tidy_baseR) <- c("Species ID","Body Weight(Kg)", "Brain Weight(g)")
+print(head(species_data_tidy_baseR))
+```
+Now we will tidy the species data using tidyverse
+```{r species_data_tidy_tidyverse,cache = FALSE, echo = TRUE, include = TRUE}
+#use dplyr to select the brain and body weight columns into their own data frame
+#brain_frame and body_frame contain the brain and body weight columns 
+brain_frame <- select(species_data_raw,seq(2,6,2))
+body_frame <- select(species_data_raw,seq(1,6,2))
+#stack the dataframes
+brain_stack <- stack(brain_frame)
+body_stack <- stack(body_frame)
+#build the tidy dataframe using data.frame and cbind from the stacked dataframes and restore the original names
+species_data_tidy_tidyverse <- data.frame(cbind(species_id,body_vector[1:62,1],brain_vector[1:62,1]))
+names(species_data_tidy_tidyverse) <- c("Species ID", "Body Weight (Kg)", "Brain Weight (g)")
+print(head(species_data_tidy_tidyverse))
+
+```
+Now we will do a summary and plot of the species data
+```{r species_data_summary_plot,cache = FALSE, echo = TRUE, include = TRUE }
+knitr::kable(summary(species_data_tidy_tidyverse[,2:3]))
+plot(species_data_tidy_tidyverse$`Body Weight (Kg)`,species_data_tidy_tidyverse$`Brain Weight (g)`)
+```
+(d) Now we will look at the tomato yield data. We will first assign the URL to a variable and then import the raw data.
+```{r tomato_data,cache = FALSE, echo = TRUE, include = TRUE}
+tomato_url <- "https://www2.isye.gatech.edu/~jeffwu/wuhamadabook/data/tomato.dat"
+#Read in the raw data
+tomato_data_raw <- fread(tomato_url,skip = 1,data.table = FALSE,header = TRUE, fill = TRUE)
+```
+Now we will tidy the data using base R.
+```{r tomato_data_tidy_baseR,cache = FALSE, echo = TRUE, include = TRUE}
+#make a copy of the raw data
+tomato_data_tidy_baseR <- copy(tomato_data_raw)
+#rename the columns and apply it to the copy
+names(tomato_data_tidy_baseR) <- c("Variety", "10000", "20000", "30000")
+#there are three measurements for each of the planting densities ("10000","20000","30000"). So for each variety there are 9 measurements and we will store them in Ife_yield and PusaEarlyDwarf respectively.
+Ife_yield <- vector(length = 0)
+PusaEarlyDwarf <- vector(length = 0)
+#populate Ife_yield and PusaEarlyDwarf by unlisting, string splitting and converting to numeric the data in the rows
+for (j in 2:4)
+{
+  Ife_yield <- append(Ife_yield,as.numeric(unlist(strsplit(tomato_data_tidy_baseR[1,j], split = ","))))
+  PusaEarlyDwarf <- append(PusaEarlyDwarf,as.numeric(unlist(strsplit(tomato_data_tidy_baseR[2,j], split = ","))))
+}
+measurements <- c(Ife_yield, PusaEarlyDwarf)
+#set up the column for planting density
+plant_density <- c(rep(10000,3),rep(20000,3),rep(30000,3))
+plant_density <- rep(plant_density,2)
+#set up the column for variety names
+variety_names <- c(rep(tomato_data_tidy_baseR[1,1],9), rep(tomato_data_tidy_baseR[2,1],9))
+#construct the dataframe
+tomato_data_tidy_baseR <-  data.frame(cbind(variety_names,plant_density,measurements))
+#give appropriate names
+names(tomato_data_tidy_baseR) <- c("Variety", "Planting Density", "Measurement")
+print(head(tomato_data_tidy_baseR))
+```
+Now we will tidy the tomato data using tidyverse
+```{r tomato_data_tidy_tidyverse,cache = FALSE, echo = TRUE, include = TRUE}
+#copy the raw data as tomato+data_tidy_tidyverse and reassign column names
+tomato_data_tidy_tidyverse <- tomato_data_raw
+names(tomato_data_tidy_tidyverse) <- c("Variety", "10000", "20000", "30000")
+#densityi_col corresponds to column i+1. So for example density1_col corresponds to the column header 10000.
+density1_col <- c(as.numeric(unlist(strsplit(tomato_data_tidy_tidyverse[1,2], split = ","))),as.numeric(unlist(strsplit(tomato_data_tidy_tidyverse[2,2], split = ","))))
+density2_col <- c(as.numeric(unlist(strsplit(tomato_data_tidy_tidyverse[1,3], split = ","))),as.numeric(unlist(strsplit(tomato_data_tidy_tidyverse[2,3], split = ","))))
+density3_col <- c(as.numeric(unlist(strsplit(tomato_data_tidy_tidyverse[1,4], split = ","))),as.numeric(unlist(strsplit(tomato_data_tidy_tidyverse[2,4], split = ","))))
+#variety_col will list the variety names for each measurement
+variety_col <- c(rep(tomato_data_tidy_tidyverse[1,1],3),rep(tomato_data_tidy_tidyverse[2,1],3))
+#get the untidy dataframe ready for using the gather function
+tomato_data_tidy_tidyverse <- data.frame(cbind(variety_col,density1_col,density2_col,density3_col))
+names(tomato_data_tidy_tidyverse) <- c("Variety", "10000", "20000", "30000")
+#use the tidyverse gather function to get the final tidy dataframe
+tomato_data_tidy_tidyverse <- tomato_data_tidy_tidyverse %>% gather(key = "Planting Density", value = "Measurement",2,3,4)
+tomato_data_tidy_tidyverse$`Planting Density` <- as.integer(tomato_data_tidy_tidyverse$`Planting Density`)
+tomato_data_tidy_tidyverse$Measurement <- as.numeric(tomato_data_tidy_tidyverse$Measurement)
+print(head(tomato_data_tidy_tidyverse))
+```
+Now we will do a summary and plot of the tomato yield data
+```{r tomato_data_summary_plot,cache = FALSE, echo = TRUE, include = TRUE}
+#gives a summary table and a boxplot of measurement by variety
+knitr::kable(summary(tomato_data_tidy_tidyverse[2:3]))
+boxplot(tomato_data_tidy_tidyverse$Measurement ~ tomato_data_tidy_tidyverse$Variety)
+```
