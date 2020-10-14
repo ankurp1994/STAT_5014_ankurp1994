@@ -1,0 +1,164 @@
+---
+title: "Homework 4"
+author: "Ankur Patel"
+date: "October 13, 2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 2: Using the dual nature to our advantage
+
+```{r Problem 2 Using the dual nature, echo=TRUE, cache=FALSE, include=TRUE}
+set.seed(1256)
+#generate the data
+theta <- as.matrix(c(1,2),nrow=2)
+X <- cbind(1,rep(1:10,10))
+h <- X%*%theta+rnorm(100,0,0.2)
+m <- 100
+
+#fit the linear model using lm, print the coefficients
+lm_fit <- lm(h ~ 0 + X)
+print(lm_fit)
+#tol is the tolerance
+tol <- 1e-6
+#alpha is the step size
+alpha <- 1e-2
+
+#main function for gradient descent
+grad_descent <- function(theta0_curr,theta1_curr,alpha,m,X,h,tol,max_iter)
+{
+  #use gradient descent to get new theta
+  theta_curr <- c(theta0_curr,theta1_curr)
+  theta0_new <- theta0_curr -(alpha/m)*sum(X%*%theta_curr-h)
+  theta1_new <- theta1_curr -(alpha/m)*sum(t(X[,2])%*%(X%*%theta_curr-h))
+  theta_updated <- c(theta0_new,theta1_new)
+  #set iteration counter
+  iter <- 1
+  while ((abs(theta0_curr-theta0_new) > tol) && (abs(theta1_curr-theta1_new) > tol))
+  {
+    #while the condition is true, continue calculating theta0_new,theta1_new
+    theta_curr <- c(theta0_curr,theta1_curr)
+    theta0_new <- theta0_curr -(alpha/m)*sum(X%*%theta_curr-h)
+    theta1_new <- theta1_curr -(alpha/m)*sum(t(X[,2])%*%(X%*%theta_curr-h))
+    iter <- iter + 1
+    if ((abs(theta0_curr-theta0_new) < tol) && (abs(theta1_curr-theta1_new) < tol) || iter > max_iter)
+    {
+      theta0_final <- theta0_new
+      theta1_final <- theta1_new
+      break
+    }
+  }
+  return(c(theta0_final,theta1_final,iter))
+}
+
+print(grad_descent(0.5,0.5,alpha,m,X,h,tol,max_iter = 1000))
+```
+The tolerance I used was 1e-6 and $\alpha = 1e-2$. I capped the number of iterations at 1000 and the final values were 0.5873 for $\theta_0$ and 1.1039 for $\theta_1$; compared to lm, gradient descent did worse.
+
+## Problem 3: Gradient Descent
+
+```{r Problem 3 Gradient Descent, echo=TRUE, cache=FALSE, include=TRUE}
+set.seed(12456)
+library(foreach)
+library(parallel)
+#make the cluster, set the number of cores
+cores <- max(1,detectCores()-1)
+cl <- makeCluster(cores)
+#maximum number of iterations
+max_iter <- 5000000
+runs <- 10000
+U <- runif(runs,-1,1)
+#the vector of starting values
+theta0_start <- 1 + U
+theta1_start <- 2 + U
+#step size and tolerance
+alpha <- 1e-7
+tol <- 1e-9
+foreach (i=1:runs,.combine="rbind") %do%
+{
+  grad_descent(theta0_start[i],theta1_start[i],alpha,m,X,h,tol,max_iter = max_iter)
+}
+```
+
+
+
+## Problem 4: Inverting Matrices
+We would need to compute $X'X$ and then factorize it to make the inversion less expensive. Since $X'X$ is symmetric, we could find a suitable decomposition for symmetric matrices.
+
+## Problem 5: Need for speed challenge
+```{r Problem 5 Need for speed, echo=TRUE, cache=FALSE, include=TRUE}
+set.seed(12456)
+G <- matrix(sample(c(0,0.5,1),size=16000,replace=T),ncol=10)
+R <- cor(G) # R: 10 * 10 correlation matrix of G
+C <- kronecker(R, diag(1600)) # C is a 16000 * 16000 block diagonal matrix
+id <- sample(1:16000,size=932,replace=F)
+q <- sample(c(0,0.5,1),size=15068,replace=T) # vector of length 15068
+A <- C[id, -id] # matrix of dimension 932 * 15068
+B <- C[-id, -id] # matrix of dimension 15068 * 15068
+p <- runif(932,0,1)
+r <- runif(15068,0,1)
+#print the sizes of A and B
+print(object.size(A))
+print(object.size(B))
+#system.time(y <- p + A %*% solve(B)%*%(q-r))
+C<-NULL #save some memory space
+chol_B <- chol(B)
+system.time(y <- p + A %*% chol2inv(chol_B)%*%(q-r))
+```
+$A$ is 112347208 bytes, $B$ is 1816357192 bytes. Without any optimization tricks, it took about 12.4 minutes to calculate y.
+
+## Problem 3 Proportion of Successes:
+
+```{r Problem 3 Proportion of Successes, echo=TRUE, cache=FALSE, include=TRUE}
+calc_prop_success <- function(x)
+{
+  n <- length(x)
+  prop <- sum(x)/n
+  return(prop)
+}
+set.seed(12345)
+P4b_data <- matrix(rbinom(10, 1, prob = (31:40)/100), nrow = 10, ncol = 10, byrow = FALSE)
+row_prop <- apply(P4b_data,1,calc_prop_success)
+col_prop <- apply(P4b_data,2,calc_prop_success)
+print(row_prop)
+print(col_prop)
+
+#gen_flips is a function that takes in probability p and returns vector
+#whose elements are the outcomes of 10 flips of a coin
+gen_flips <- function(p)
+{
+  y <- rbinom(10,1,p)
+  return(y)
+}
+test_gen_flips <- gen_flips(0.25)
+print(test_gen_flips)
+
+prob_vector <- seq(31,40)/100
+P4b_data_corrected <- sapply(X = prob_vector,FUN = gen_flips)
+row_prop_correct <- apply(P4b_data_corrected,1,calc_prop_success)
+col_prop_correct <- apply(P4b_data_corrected,2,calc_prop_success)
+print(row_prop_correct)
+print(col_prop_correct)
+```
+For the proportion of success by row, we get 0's and 1's whereas for the proportion of success by column, we get 0.6 every time. It is using the first probability, 31/100 each time and since the seed is fixed, we get the same outcome.
+
+## Problem 4 Observers Data:
+```{r Problem 4 Observers Data, echo=TRUE, cache=FALSE, include=TRUE}
+devices_dat <- readRDS("D:/Downloads/HW3_data.rds")
+names(devices_dat) <- c("Observer","x","y")
+Observer_cat <- unique(devices_dat$Observer)
+
+my_plotfun <- function(Y = devices_dat,index,title = "Devices by Observer",xlab = "Device 1",ylab = "Device 2")
+{
+  X <- subset(Y, Observer == index)
+  plot(x = X$x, y = X$y, main = title, xlab = xlab, ylab = ylab)
+}
+
+my_plotfun(index = Observer_cat, title = "Entire Dataset")
+sapply(X = Observer_cat,FUN = my_plotfun,Y=devices_dat,xlab="Device 1", ylab = "Device 2", title = "Devices by Observer")
+```
+
+
