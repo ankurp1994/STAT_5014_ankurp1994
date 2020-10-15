@@ -28,23 +28,22 @@ tol <- 1e-6
 alpha <- 1e-2
 
 #main function for gradient descent
-grad_descent <- function(theta0_curr,theta1_curr,alpha,m,X,h,tol,max_iter)
+grad_descent <- function(theta0_old,theta1_old,alpha,m,X,h,tol,max_iter)
 {
   #use gradient descent to get new theta
-  theta_curr <- c(theta0_curr,theta1_curr)
-  theta0_new <- theta0_curr -(alpha/m)*sum(X%*%theta_curr-h)
-  theta1_new <- theta1_curr -(alpha/m)*sum(t(X[,2])%*%(X%*%theta_curr-h))
-  theta_updated <- c(theta0_new,theta1_new)
+  theta_old <- c(theta0_old,theta1_old)
+  theta0_new <- theta0_old -(alpha/m)*sum(X%*%theta_old-h)
+  theta1_new <- theta1_old -(alpha/m)*sum(t(X[,2])%*%(X%*%theta_old-h))
   #set iteration counter
   iter <- 1
-  while ((abs(theta0_curr-theta0_new) > tol) && (abs(theta1_curr-theta1_new) > tol))
+  while ((abs(theta0_old-theta0_new) > tol) && (abs(theta1_old-theta1_new) > tol))
   {
     #while the condition is true, continue calculating theta0_new,theta1_new
-    theta_curr <- c(theta0_curr,theta1_curr)
-    theta0_new <- theta0_curr -(alpha/m)*sum(X%*%theta_curr-h)
-    theta1_new <- theta1_curr -(alpha/m)*sum(t(X[,2])%*%(X%*%theta_curr-h))
+    theta_old <- c(theta0_new,theta1_new)
+    theta0_new <- theta0_old -(alpha/m)*sum(X%*%theta_old-h)
+    theta1_new <- theta1_old -(alpha/m)*t(X[,2])%*%(X%*%theta_old-h)
     iter <- iter + 1
-    if ((abs(theta0_curr-theta0_new) < tol) && (abs(theta1_curr-theta1_new) < tol) || iter > max_iter)
+    if ((abs(theta0_old-theta0_new) < tol) && (abs(theta1_old-theta1_new) < tol) || iter > max_iter)
     {
       theta0_final <- theta0_new
       theta1_final <- theta1_new
@@ -54,9 +53,9 @@ grad_descent <- function(theta0_curr,theta1_curr,alpha,m,X,h,tol,max_iter)
   return(c(theta0_final,theta1_final,iter))
 }
 
-print(grad_descent(0.5,0.5,alpha,m,X,h,tol,max_iter = 1000))
+print(grad_descent(0.5,1,alpha,m,X,h,tol,max_iter = 1000))
 ```
-The tolerance I used was 1e-6 and $\alpha = 1e-2$. I capped the number of iterations at 1000 and the final values were 0.5873 for $\theta_0$ and 1.1039 for $\theta_1$; compared to lm, gradient descent did worse.
+The tolerance I used was 1e-6 and $\alpha = 1e-2$. I capped the number of iterations at 1000 and the final values were 0.5431 for $\theta_0$ and 1.2953 for $\theta_1$; compared to lm, gradient descent did worse.
 
 ## Problem 3: Gradient Descent
 
@@ -69,7 +68,7 @@ cores <- max(1,detectCores()-1)
 cl <- makeCluster(cores)
 #maximum number of iterations
 max_iter <- 5000000
-runs <- 10000
+runs <- 100
 U <- runif(runs,-1,1)
 #the vector of starting values
 theta0_start <- 1 + U
@@ -77,16 +76,22 @@ theta1_start <- 2 + U
 #step size and tolerance
 alpha <- 1e-7
 tol <- 1e-9
+#run gradient descent in parallel
 foreach (i=1:runs,.combine="rbind") %do%
 {
   grad_descent(theta0_start[i],theta1_start[i],alpha,m,X,h,tol,max_iter = max_iter)
 }
+stopCluster(cl)
 ```
+
+If we changed the stopping rule to include our knowledge of the true value, it could improve accuracy by ensuring that we converge to the right solution because the tolerance would be with respect to the solution and the true value. On the other hand, it could cause the gradient descent algorithm to run for a very long time to achieve convergence. This algorithm works well if we choose $\alpha$ and the tolerance reasonably well. However, if we don't it can run endlessly. 
+
+Even in parallel, this computation was taking my computer over 3 hours to run; I was not able to get any results.
 
 
 
 ## Problem 4: Inverting Matrices
-We would need to compute $X'X$ and then factorize it to make the inversion less expensive. Since $X'X$ is symmetric, we could find a suitable decomposition for symmetric matrices.
+We would need to compute $X'X$ and then factorize it to make the inversion less expensive. Since $X'X$ is symmetric, we could find a suitable decomposition for symmetric matrices. In the current computation, we are computing and then inverting $X'X$ which is expensive and then multiplying by $X'y$.
 
 ## Problem 5: Need for speed challenge
 ```{r Problem 5 Need for speed, echo=TRUE, cache=FALSE, include=TRUE}
@@ -108,7 +113,7 @@ C<-NULL #save some memory space
 chol_B <- chol(B)
 system.time(y <- p + A %*% chol2inv(chol_B)%*%(q-r))
 ```
-$A$ is 112347208 bytes, $B$ is 1816357192 bytes. Without any optimization tricks, it took about 12.4 minutes to calculate y.
+$A$ is 112347208 bytes, $B$ is 1816357192 bytes. Without any optimization tricks, it took about 12.4 minutes to calculate y. It makes the most sense to try to decompose B and then take the inverse to speed up the calculation. I tried using the cholesky decomposition and then chol2inv but it is still not able to compute it fast.
 
 ## Problem 3 Proportion of Successes:
 
@@ -147,18 +152,117 @@ For the proportion of success by row, we get 0's and 1's whereas for the proport
 
 ## Problem 4 Observers Data:
 ```{r Problem 4 Observers Data, echo=TRUE, cache=FALSE, include=TRUE}
+#read the data, rename columns and extract the Observers
 devices_dat <- readRDS("D:/Downloads/HW3_data.rds")
 names(devices_dat) <- c("Observer","x","y")
 Observer_cat <- unique(devices_dat$Observer)
 
+#create my plotting function
 my_plotfun <- function(Y = devices_dat,index,title = "Devices by Observer",xlab = "Device 1",ylab = "Device 2")
 {
   X <- subset(Y, Observer == index)
   plot(x = X$x, y = X$y, main = title, xlab = xlab, ylab = ylab)
 }
 
+#plot the entire dataset and then use sapply to plot by Observer
 my_plotfun(index = Observer_cat, title = "Entire Dataset")
 sapply(X = Observer_cat,FUN = my_plotfun,Y=devices_dat,xlab="Device 1", ylab = "Device 2", title = "Devices by Observer")
 ```
 
+## Problem 5: Map
 
+```{r Problem 5 Map, echo=TRUE, cache=FALSE, include=TRUE}
+#I unzipped the file directly and put the data directly into my project #file. Then I just read in the data
+states <- fread("states.sql",skip = 23,sep = "'", sep2 = ",", header = F, select = c(2,4))
+cities_ext <- fread("cities.sql",skip = 23,sep = "'", sep2 = ",", header = F, select = c(2,4))
+```
+
+## Problem 2: Bootstrapping
+
+```{r Problem 2 Bootstrapping, echo=TRUE, cache=FALSE, include=TRUE}
+#Code to get "http://www2.isye.gatech.edu/~jeffwu/wuhamadabook/data/Sensory.dat"
+sensory_url <- "http://www2.isye.gatech.edu/~jeffwu/wuhamadabook/data/Sensory.dat"
+sensory_data_raw <- fread(sensory_url,skip = 2,data.table = FALSE,header = FALSE, fill = TRUE)
+#create an items_column which will be on the left side of the dataframe
+items_column <- vector(length = 0)
+for (i in 1:10)
+{
+  items_column <- append(items_column, rep(i,3))
+}
+#the item numbers are woven into the first column so we replace them with NA's #using the two lines of code below and call the new column first col_clean
+first_col_clean <- sensory_data_raw$V1
+first_col_clean[seq(1,30,3)] <- NA
+sensory_data_tidy_baseR <- cbind(first_col_clean,sensory_data_raw[,2:6])
+#we store the rows to fix in rows_to_fix
+rows_to_fix <- seq(1,30,3)
+#the for loop below shifts the rows to fix one entry to the left and the last entry is NA, ensuring that the operator and values are now aligned
+for (i in 1:length(rows_to_fix))
+{
+  curr_row <- rows_to_fix[i]
+  cleaned_row <- c(sensory_data_tidy_baseR[curr_row,2:6],NA)
+  sensory_data_tidy_baseR[curr_row,] <- cleaned_row
+}
+#rename the first column
+names(sensory_data_tidy_baseR)[1] <- "V1"
+#drop the last column since it is all NA
+sensory_data_tidy_baseR <- sensory_data_tidy_baseR[,1:5]
+#bind the items_column and rename the columns
+sensory_data_tidy_baseR <- cbind(items_column,sensory_data_tidy_baseR)
+names(sensory_data_tidy_baseR)<- c("Item","1","2","3","4","5")
+#the current form of sensory_data_tidy_baseR is what we will use for the tidyverse version so we make a copy of it here
+sensory_data_tidy_tidyverse <- copy(sensory_data_tidy_baseR)
+#operator_column repeats the operator values in a sequence 1,...,5 30 times which will be one of the columns of the final 150 x 3 dataframe
+operator_column <- rep(seq(1,5),30)
+#the measurement column turns the  data in the rows into a vector
+measurement_column <- vector(length = 0)
+for (i in 1:dim(sensory_data_tidy_baseR)[1])
+{
+  #unlist is used to turn the rows into vectors
+  measurement_column <- append(measurement_column,unlist(sensory_data_tidy_baseR[i,2:6],use.names = FALSE))
+}
+#the final items column should have 150 entries
+items_column_final <- vector(length = 0)
+for (i in 1:10)
+{
+  items_column_final <- append(items_column_final, rep(i,15))
+}
+sensory_data_tidy_baseR <- data.frame(cbind(items_column_final,operator_column,measurement_column))
+names(sensory_data_tidy_baseR) <-c("Item", "Operator","Data")
+
+beta0_vector <- vector(length = 100)
+beta1_vector <- vector(length = 100)
+system.time(for (i in 1:100)
+{
+  i <- sample(x = 1:150,size = 150,replace = TRUE)
+  boot_sensory_data <- sensory_data_tidy_baseR[i,]
+  lm_fit <- lm(Data ~ Operator, data = boot_sensory_data)
+  beta0_vector <- append(beta0_vector,summary(lm_fit)$coef[1,1])
+  beta1_vector <- append(beta1_vector,summary(lm_fit)$coef[1,2])
+})
+
+beta0_mean <- mean(beta0_vector)
+beta1_mean <- mean(beta1_vector)
+
+library(foreach)
+library(parallel)
+#make the cluster, set the number of cores
+cores <- max(1,detectCores()-1)
+cl <- makeCluster(cores)
+
+system.time(foreach(i=1:100) %do%
+{
+  i <- sample(x = 1:150,size = 150,replace = TRUE)
+  boot_sensory_data <- sensory_data_tidy_baseR[i,]
+  lm_fit <- lm(Data ~ Operator, data = boot_sensory_data)
+})
+
+stopCluster(cl)
+
+beta <- c(beta0_mean,beta1_mean)
+time <- c(0.11,0.10)
+method <- c("Series,Parallel")
+method.time <- cbind(method,time)
+knitr::kable()
+```
+
+The supplied code in stack exchange failed to generate different samples on each run; for some reason it remained stuck at the same sample thus giving the same results. It is possible to do the bootstraps in parallel because the bootstrap sampling is done independently of other samples. Based on the difference in elapsed time, the small number of bootstrap samples, and the small data size I would say that it makes little difference computing in series vs parallel.
