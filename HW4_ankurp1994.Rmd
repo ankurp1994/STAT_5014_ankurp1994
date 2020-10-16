@@ -384,6 +384,8 @@ knitr::kable(method.time, col.names = c("Method","Time"))
 
 The supplied code in stack exchange failed to generate different samples on each run; for some reason it remained stuck at the same sample thus giving the same results. It is possible to do the bootstraps in parallel because the bootstrap sampling is done independently of other samples. Based on the difference in elapsed time, the small number of bootstrap samples, and the small data size I would say that it makes little difference computing in series vs parallel for this problem. The mean of the estimated $\beta_0$ was 2.4194 and the mean of the estimated $\beta_1$ was 0.2046.
 
+## Problem 3: Newtons Method
+
 ```{r Problem 3 Newtons Method, echo=TRUE, cache=FALSE, include=TRUE}
 #the grid we will search over
 grid <- seq(-20,0,length.out = 100)
