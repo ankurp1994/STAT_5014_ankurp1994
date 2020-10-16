@@ -9,6 +9,9 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+Note: Because some problems were taking very long to run, I could not get the output. I generated the pdf by commenting out the parts that were running for a long time. I then uncommented them when I pushed the markdown to git.
+
 ## Problem 2: Using the dual nature to our advantage
 
 ```{r Problem 2 Using the dual nature, echo=TRUE, cache=FALSE, include=TRUE}
@@ -26,36 +29,29 @@ print(lm_fit)
 tol <- 1e-6
 #alpha is the step size
 alpha <- 1e-2
+theta_curr <- as.matrix(c(0.5,1),nrow =2)
 
-#main function for gradient descent
-grad_descent <- function(theta0_old,theta1_old,alpha,m,X,h,tol,max_iter)
+grad_descent <- function(theta_curr,alpha,m,X,h,tol,max_iter)
 {
-  #use gradient descent to get new theta
-  theta_old <- c(theta0_old,theta1_old)
-  theta0_new <- theta0_old -(alpha/m)*sum(X%*%theta_old-h)
-  theta1_new <- theta1_old -(alpha/m)*sum(t(X[,2])%*%(X%*%theta_old-h))
-  #set iteration counter
   iter <- 1
-  while ((abs(theta0_old-theta0_new) > tol) && (abs(theta1_old-theta1_new) > tol))
+  theta_new <- theta_curr - (alpha/m)*t(X)%*%(X%*%theta_curr-h)
+  while((abs(theta_curr[1]-theta_new[1])) > tol && (abs(theta_curr[2]-theta_new[2])) > tol)
   {
-    #while the condition is true, continue calculating theta0_new,theta1_new
-    theta_old <- c(theta0_new,theta1_new)
-    theta0_new <- theta0_old -(alpha/m)*sum(X%*%theta_old-h)
-    theta1_new <- theta1_old -(alpha/m)*t(X[,2])%*%(X%*%theta_old-h)
     iter <- iter + 1
-    if ((abs(theta0_old-theta0_new) < tol) && (abs(theta1_old-theta1_new) < tol) || iter > max_iter)
+    if (((abs(theta_curr[1]-theta_new[1])) < tol && (abs(theta_curr[2]-theta_new[2]) < tol)) || (iter > max_iter))
     {
-      theta0_final <- theta0_new
-      theta1_final <- theta1_new
-      break
+      theta_final <- theta_new
+      return(c(theta_final,max_iter))
     }
+    theta_curr <- theta_new
+    theta_new <- theta_curr - (alpha/m)*t(X)%*%(X%*%theta_curr-h)
+    
   }
-  return(c(theta0_final,theta1_final,iter))
 }
+print(grad_descent(theta_curr,alpha,m,X,h,tol,max_iter = 1000))
 
-print(grad_descent(0.5,1,alpha,m,X,h,tol,max_iter = 1000))
 ```
-The tolerance I used was 1e-6 and $\alpha = 1e-2$. I capped the number of iterations at 1000 and the final values were 0.5431 for $\theta_0$ and 1.2953 for $\theta_1$; compared to lm, gradient descent did worse.
+The tolerance I used was 1e-6 and $\alpha = 1e-2$. For lm,the estimate for $\theta_0$ was 0.9696 and for $theta_1$ it was 2.0016. I capped the number of iterations at 1000 and the final values were 0.8707 for $\theta_0$ and 2.0158 for $\theta_1$ for gradient descent; compared to lm, gradient descent did slightly worse.
 
 ## Problem 3: Gradient Descent
 
@@ -67,19 +63,21 @@ library(parallel)
 cores <- max(1,detectCores()-1)
 cl <- makeCluster(cores)
 #maximum number of iterations
-max_iter <- 5000000
+max_iter <- 5000
 runs <- 100
+#sample from a uniform (-1,1) which will helps us get theta_start
 U <- runif(runs,-1,1)
 #the vector of starting values
 theta0_start <- 1 + U
 theta1_start <- 2 + U
+theta_start <- cbind(theta0_start,theta1_start)
 #step size and tolerance
 alpha <- 1e-7
 tol <- 1e-9
 #run gradient descent in parallel
 foreach (i=1:runs,.combine="rbind") %do%
 {
-  grad_descent(theta0_start[i],theta1_start[i],alpha,m,X,h,tol,max_iter = max_iter)
+  grad_descent(theta_start[i,],alpha,m,X,h,tol,max_iter = max_iter)
 }
 stopCluster(cl)
 ```
@@ -108,7 +106,7 @@ r <- runif(15068,0,1)
 #print the sizes of A and B
 print(object.size(A))
 print(object.size(B))
-#system.time(y <- p + A %*% solve(B)%*%(q-r))
+system.time(y <- p + A %*% solve(B)%*%(q-r))
 C<-NULL #save some memory space
 chol_B <- chol(B)
 system.time(y <- p + A %*% chol2inv(chol_B)%*%(q-r))
@@ -166,15 +164,131 @@ my_plotfun <- function(Y = devices_dat,index,title = "Devices by Observer",xlab 
 
 #plot the entire dataset and then use sapply to plot by Observer
 my_plotfun(index = Observer_cat, title = "Entire Dataset")
-sapply(X = Observer_cat,FUN = my_plotfun,Y=devices_dat,xlab="Device 1", ylab = "Device 2", title = "Devices by Observer")
+#plot the different Observers
+multiplot <- sapply(X = Observer_cat,FUN = my_plotfun,Y=devices_dat,xlab="Device 1", ylab = "Device 2", title = "Devices by Observer")
+multiplot
+
 ```
 
 ## Problem 5: Map
 
 ```{r Problem 5 Map, echo=TRUE, cache=FALSE, include=TRUE}
 #I unzipped the file directly and put the data directly into my project #file. Then I just read in the data
+library(data.table)
 states <- fread("states.sql",skip = 23,sep = "'", sep2 = ",", header = F, select = c(2,4))
 cities_ext <- fread("cities.sql",skip = 23,sep = "'", sep2 = ",", header = F, select = c(2,4))
+#take out DC from states and make a new dataframe
+states_noDC <- states[-8,]
+#build a dataframe for number of cities by state
+num_cities_bystate <- vector()
+for (i in 1:50)
+{
+  curr_state <- states_noDC[i,2]
+  curr_state_long <- states_noDC[i,1]
+  curr_cities <- subset(cities_ext, V4 == toString(unlist(curr_state)))
+  curr_num_cities <- dim(curr_cities)[1]
+  curr_row <- c(tolower(toString(unlist(curr_state_long))),toString(unlist(curr_state)),curr_num_cities)
+  num_cities_bystate <- rbind(num_cities_bystate,curr_row)
+}
+num_cities_bystate <- data.frame(num_cities_bystate)
+#name the columns
+colnames(num_cities_bystate) <- c("State","State_Short", "Num_Cities")
+num_cities_bystate$Num_Cities <- as.numeric(num_cities_bystate$Num_Cities)
+#make a table
+knitr::kable(num_cities_bystate)
+
+letter_count <- data.frame(matrix(nrow = 50, ncol = 26))
+getCount <- function(letter,state_name)
+{
+  #make the letter and state the same case
+  letter <- toupper(letter)
+  state_name <- toupper(state_name)
+  #split the state into letters, set the counter
+  temp <- unlist(strsplit(state_name,split=""))
+  count <- 0
+  #do the comparison and counting
+  for (i in 1:length(temp))
+  {
+    if (temp[i] == letter)
+    {
+      count <- count + 1
+    }
+  }
+  return(count)
+}
+#use a for loop and sapply to fill in letters_count
+for (i in 1:50)
+{
+  curr_state <- toString(unlist(states_noDC[i,1]))
+  letter_count[i,] <- sapply(LETTERS,FUN = getCount,state_name = curr_state)
+}
+#add column and rownames to the letter_count data frame
+names(letter_count) <- LETTERS
+rownames(letter_count) <- as.vector(num_cities_bystate[,1])
+
+#greater3 is a vector which indicates whether a state has more than 3 #occurrences for any letter
+greater3 <- rep(0,50)
+for (i in 1:50)
+{
+  curr_state <- toString(unlist(states_noDC[i,1]))
+  curr_letter_count <- letter_count[i,]
+  for (j in 1:26)
+  {
+    #1 indicates a state has more than 3 occurrences for any letter
+    if (curr_letter_count[j] > 3)
+    {
+      greater3[i] <- 1
+      break
+    }
+  }
+}
+
+states_greater3 <- data.frame(cbind(as.vector(num_cities_bystate$State),greater3))
+
+library(ggplot2)
+library(remotes)
+#install_version("fiftystater", "1.0.1")
+library(fiftystater) 
+    data("fifty_states") # this line is optional due to lazy data loading
+    crimes <- data.frame(state = tolower(rownames(USArrests)), USArrests)
+    # map_id creates the aesthetic mapping to the state name column in your data
+    p <- ggplot(crimes, aes(map_id = state)) + 
+      # map points to the fifty_states shape data
+      geom_map(aes(fill = Assault), map = fifty_states) + 
+      expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+      coord_map() +
+      scale_x_continuous(breaks = NULL) +
+      scale_y_continuous(breaks = NULL) +
+      labs(x = "", y = "") +
+      theme(legend.position = "bottom", 
+            panel.background = element_blank())
+    p
+
+    p_numcities <- ggplot(num_cities_bystate, aes(map_id = State)) + 
+      # map points to the fifty_states shape data
+      geom_map(aes(fill = Num_Cities), map = fifty_states) + 
+      expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+      coord_map() +
+      scale_x_continuous(breaks = NULL) +
+      scale_y_continuous(breaks = NULL) +
+      labs(x = "", y = "") +
+      theme(legend.position = "bottom", 
+            panel.background = element_blank())
+    
+    names(states_greater3)[1] <- "State"
+    
+    p_greater3 <- ggplot(states_greater3, aes(map_id = State)) + 
+      # map points to the fifty_states shape data
+      geom_map(aes(fill = greater3), map = fifty_states) + 
+      expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+      coord_map() +
+      scale_x_continuous(breaks = NULL) +
+      scale_y_continuous(breaks = NULL) +
+      labs(x = "", y = "") +
+      theme(legend.position = "bottom", 
+            panel.background = element_blank())
+    p_greater3
+    
 ```
 
 ## Problem 2: Bootstrapping
@@ -229,6 +343,7 @@ for (i in 1:10)
 sensory_data_tidy_baseR <- data.frame(cbind(items_column_final,operator_column,measurement_column))
 names(sensory_data_tidy_baseR) <-c("Item", "Operator","Data")
 
+#beta0_vector stores the beta0s, beta1_vector stores the beta1s
 beta0_vector <- vector(length = 100)
 beta1_vector <- vector(length = 100)
 system.time(for (i in 1:100)
@@ -259,10 +374,80 @@ system.time(foreach(i=1:100) %do%
 stopCluster(cl)
 
 beta <- c(beta0_mean,beta1_mean)
-time <- c(0.11,0.10)
-method <- c("Series,Parallel")
+print(beta)
+time <- rbind(0.11,0.10)
+method <- rbind("Series","Parallel")
 method.time <- cbind(method,time)
-knitr::kable()
+method.time <- as.data.frame(method.time)
+knitr::kable(method.time, col.names = c("Method","Time"))
 ```
 
-The supplied code in stack exchange failed to generate different samples on each run; for some reason it remained stuck at the same sample thus giving the same results. It is possible to do the bootstraps in parallel because the bootstrap sampling is done independently of other samples. Based on the difference in elapsed time, the small number of bootstrap samples, and the small data size I would say that it makes little difference computing in series vs parallel.
+The supplied code in stack exchange failed to generate different samples on each run; for some reason it remained stuck at the same sample thus giving the same results. It is possible to do the bootstraps in parallel because the bootstrap sampling is done independently of other samples. Based on the difference in elapsed time, the small number of bootstrap samples, and the small data size I would say that it makes little difference computing in series vs parallel for this problem. The mean of the estimated $\beta_0$ was 2.4194 and the mean of the estimated $\beta_1$ was 0.2046.
+
+```{r Problem 3 Newtons Method, echo=TRUE, cache=FALSE, include=TRUE}
+#the grid we will search over
+grid <- seq(-20,0,length.out = 100)
+#orig_function is the original function
+orig_function <- function(x)
+  {
+    orig <- 3^x-sin(x)+cos(5*x)
+    return(orig)
+}
+#plot the original function from -20 to 0
+curve(orig_function,from = -20,to = 0)
+#deriv_function is the derivative of deriv_function
+deriv_function <- function(x)
+  {
+    deriv <- 3^x*log(3) - cos(x) - 5*sin(5*x)
+    return(deriv)
+  }
+
+#The tolerance is 10^-6 
+tolerance <- 1e-6
+
+#newton_method applies the newton method using the original function, the #derivative of the original function, an initial value, and a tolerance.
+newton_method <- function(tolerance,orig_function,deriv_function,start_x)
+  {
+    #before the while loop, we set x_vector which stores x_n for iteration n
+    x_vector <- start_x
+    #curr_x is the current approximation to the root
+    curr_x <- start_x
+    #iter is the current iteration and iter_vector stores how many iterations     #there have been
+    iter <- 1
+    iter_vector <- 1
+  
+    #since we are looking for the root, we run a while loop as long as the        #original function evaluated at the current approximation is greater than     #the tolerance.
+    while(abs(orig_function(curr_x)) > tolerance)
+      {
+        #set the new current x using newton's method
+        curr_x <- curr_x-orig_function(curr_x)/deriv_function(curr_x)
+        #if the original function at the current approximation is less than           #the tolerance, we stop; otherwise we continue
+        if (abs(orig_function(curr_x)) <= tolerance)
+          {
+            x_vector <- append(x_vector,curr_x)
+            iter <- iter + 1
+            iter_vector <- append(iter_vector,iter)
+            solution <- curr_x
+            break
+          }
+        x_vector <- append(x_vector,curr_x)
+        iter <- iter + 1
+        iter_vector <- append(iter_vector,iter)
+  }
+  
+    #return the vector of iterations, approximations to the root, the original     #function evaluated at each approximation, and the final solution as a        #list.
+    return(ls = list(iter_vector = iter_vector,x_vector =                         x_vector,orig_function = orig_function(x_vector),solution = solution))
+}
+
+#use sapply on the grid
+system.time(roots <- sapply(grid,newton_method,tolerance = tol, orig_function = orig_function, deriv_function = deriv_function))
+
+#use parSapply on the grid
+library(parallel)
+cores <- max(1,detectCores()-1)
+cl <- makeCluster(cores)
+parSapply(cl,grid,newton_method,tolerance = tol, orig_function = orig_function, deriv_function = deriv_function)
+stopCluster(cl)
+```
+
+There seems to be an infinite number of roots so I just chose the interval [-20,0] to apply the Newton method on. Unfortunately, it was taking my computer way too long to get results using sapply and parSapply. However, I suspect that in this problem, parSapply may be more useful since we are dealing with a large grid and so parallelism would be more appropriate to use.
