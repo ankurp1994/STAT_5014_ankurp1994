@@ -1,0 +1,95 @@
+---
+title: "Homework 5"
+author: "Ankur Patel"
+date: "November 3, 2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 3:
+```{r Problem 3, echo=TRUE, cache=FALSE, include=TRUE}
+library(tidyverse)
+edstats <- read.table("EdStatsData.csv", header = TRUE, sep = ",")
+edstats_tidy <- gather(edstats,key = "year", value = "Estimation",c(5:69))
+#We choose Turkey and Vietnam for the two countries.
+edstats_trimmed <- subset(edstats_tidy, ï..Country.Name == c("Turkey","Vietnam"))
+#We extract the unique indicator codes and we will do a summary table based
+#on the first 4
+unique_indicators <- unique(edstats_trimmed$Indicator.Code)
+indicators_touse <- unique_indicators[1:4]
+#edstats_tosummarize is the dataframe that we form from edstats_trimmed
+#by subsetting on the 4 indicator codes
+edstats_tosummarize <- subset(edstats_trimmed, Indicator.Code == indicators_touse)
+#The next two dataframes are what we use to make the summaries and is formed
+#by subetting edstats_tosummarize on country
+edstats_tosummarize_Turkey <- subset(edstats_tosummarize, ï..Country.Name == "Turkey")
+edstats_tosummarize_Vietnam <- subset(edstats_tosummarize, ï..Country.Name == "Vietnam")
+#estimation_matrix will be a dataframe with row 1 = Turkey, row 2 = Vietnam
+#and the columns being the indicator codes
+estimation_matrix <- matrix(nrow = 2, ncol = 4)
+for (i in 1:4)
+{
+  #the current indicator
+  curr_indicator <- indicators_touse[i]
+  #current data based off the current indicator for both Turkey and Vietnam
+  curr_data_Turkey <- subset(edstats_tosummarize_Turkey,Indicator.Code == curr_indicator)
+  curr_data_Vietnam <- subset(edstats_tosummarize_Vietnam,Indicator.Code == curr_indicator)
+  #fill in the estimation_matrix
+  estimation_matrix[1,i] <- mean(curr_data_Turkey$Estimation, na.rm = TRUE)
+  estimation_matrix[2,i] <- mean(curr_data_Vietnam$Estimation, na.rm = TRUE)
+}
+#convert estimation_matrix to data frame and then give row names, column #names and form a table
+estimation_matrix <- data.frame(estimation_matrix)
+row.names(estimation_matrix) <- c("Turkey","Vietnam")
+colnames(estimation_matrix) <- indicators_touse
+knitr::kable(estimation_matrix)
+```
+There were 886930 points in the complete dataset. After tidying the data, there were 57650450 observations. For Vietnam, there were no values for the indicator codes we selected.
+
+## Problem 4:
+```{r Problem 4, echo=TRUE, cache=FALSE, include=TRUE}
+library(MASS)
+#make a function to clean up the year column
+convert_YearString <- function(y)
+{
+  y_new <- as.numeric(substr(y,start = 2, stop = 5))
+  return(y_new)
+}
+#remove NAs where estimation is missing
+edstats_tosummarize_Turkey <- edstats_tosummarize_Turkey[complete.cases(edstats_tosummarize_Turkey$Estimation),] 
+#clean the year column and assign it to the dataframe we want to work with,
+#in this case edstats_tosummarize_Turkey
+dim_edstats_trimmed_Turkey <- dim(edstats_tosummarize_Turkey)
+year_cleaned <- vector(length = dim_edstats_trimmed_Turkey[1])
+for (i in 1:dim_edstats_trimmed_Turkey[1])
+{
+  year_cleaned[i] <- convert_YearString(edstats_tosummarize_Turkey$year[i]) 
+}
+year_cleaned <- year_cleaned[1:dim_edstats_trimmed_Turkey[1]]
+edstats_tosummarize_Turkey$year <- year_cleaned
+#fit the linear model and do some plots
+lm_Turkey <- lm(Estimation ~ year, data = edstats_tosummarize_Turkey)
+par(mfrow = c(2,3))
+#Studentized Residuals vs leverage
+plot(studres(lm_Turkey)~hatvalues(lm_Turkey), xlab = "Leverage", ylab = "Studentized Residuals", main = "Studentized Residuals vs Leverage")
+#Studentized Residuals vs Fitted
+plot(studres(lm_Turkey)~predict(lm_Turkey), xlab = "Fitted Values", ylab = "Studentized Residuals", main = "Studentized Residuals vs Fitted")
+#Residuals vs fitted
+plot(resid(lm_Turkey) ~ predict(lm_Turkey), xlab = "Fitted", ylab = "Residuals", main = "Residuals vs. Fitted")
+#Observed vs Fitted data
+plot(edstats_tosummarize_Turkey$Estimation ~ predict(lm_Turkey), xlab = "Fitted", ylab = "Observed", main = "Observed vs Fitted")
+#Residuals vs Quantile plot
+plot(lm_Turkey, which = 2)
+#Cooks distance by observation
+plot(cooks.distance(lm_Turkey) ~ seq(1,54), xlab = "Observation", ylab = "Cooks D", main = "Cooks Distance by Observation")
+```
+
+## Problem 5:
+```{r Problem 5, echo=TRUE, cache=FALSE, include=TRUE}
+#use autoplot from ggfortify to do the plots
+library(ggfortify)
+autoplot(lm_Turkey, which = c(1:6))
+```
